@@ -1,6 +1,6 @@
 name: native_file_picker
 description: "A Flutter plugin for picking files natively on iOS and Android with support for multiple file types and extensions."
-version: 0.0.1
+version: 1.0.0
 homepage: "https://github.com/RajaSabiq/NativeFilePicker.git"
 
 environment:
