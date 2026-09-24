@@ -10,6 +10,38 @@ import 'native_file_picker_platform_interface.dart';
 /// The main class for native file picker
 class NativeFilePicker {
   static const MethodChannel _channel = MethodChannel('native_file_picker');
+  static const EventChannel _progressChannel =
+      EventChannel('native_file_picker/progress');
+
+  static StreamController<double>? _progressController;
+  static StreamSubscription<dynamic>? _progressSubscription;
+
+  /// Stream of file-copy progress ranging from 0.0 to 1.0.
+  ///
+  /// Events are emitted while a picked file is being copied into temporary
+  /// storage on the native side. Listen to this *before* calling [pickFile]
+  /// or [pickMultipleFiles] so a progress indicator can be shown during the
+  /// copy phase. When the source size is unknown the stream jumps straight
+  /// to 1.0 on completion.
+  static Stream<double> get onPickProgress {
+    final controller = _progressController ??=
+        StreamController<double>.broadcast(
+      onListen: () {
+        _progressSubscription = _progressChannel
+            .receiveBroadcastStream()
+            .listen((event) {
+          if (event is num && _progressController != null) {
+            _progressController!.add(event.toDouble().clamp(0.0, 1.0).toDouble());
+          }
+        });
+      },
+      onCancel: () {
+        _progressSubscription?.cancel();
+        _progressSubscription = null;
+      },
+    );
+    return controller.stream;
+  }
 
   Future<String?> getPlatformVersion() {
     return NativeFilePickerPlatform.instance.getPlatformVersion();
@@ -19,6 +51,7 @@ class NativeFilePicker {
   static Future<FilePickerResult?> pickFile({
     List<String>? allowedExtensions,
     FileType type = FileType.any,
+    Duration timeout = const Duration(seconds: 120),
   }) async {
     try {
       final Map<String, dynamic> arguments = {
@@ -27,7 +60,14 @@ class NativeFilePicker {
         'allowedExtensions': allowedExtensions,
       };
 
-      final result = await _channel.invokeMethod('pickFiles', arguments);
+      final result = await _channel
+          .invokeMethod('pickFiles', arguments)
+          .timeout(
+            timeout,
+            onTimeout: () {
+              throw const FilePickerException('File picker timed out');
+            },
+          );
 
       if (result != null && result is Map) {
         return FilePickerResult.fromMap(Map<String, dynamic>.from(result));
@@ -42,6 +82,7 @@ class NativeFilePicker {
   static Future<FilePickerResult?> pickMultipleFiles({
     List<String>? allowedExtensions,
     FileType type = FileType.any,
+    Duration timeout = const Duration(seconds: 120),
   }) async {
     try {
       final Map<String, dynamic> arguments = {
@@ -50,7 +91,14 @@ class NativeFilePicker {
         'allowedExtensions': allowedExtensions,
       };
 
-      final result = await _channel.invokeMethod('pickFiles', arguments);
+      final result = await _channel
+          .invokeMethod('pickFiles', arguments)
+          .timeout(
+            timeout,
+            onTimeout: () {
+              throw const FilePickerException('File picker timed out');
+            },
+          );
 
       if (result != null && result is Map) {
         return FilePickerResult.fromMap(Map<String, dynamic>.from(result));
@@ -62,9 +110,18 @@ class NativeFilePicker {
   }
 
   /// Get directory path
-  static Future<String?> getDirectoryPath() async {
+  static Future<String?> getDirectoryPath({
+    Duration timeout = const Duration(seconds: 120),
+  }) async {
     try {
-      final result = await _channel.invokeMethod('getDirectoryPath');
+      final result = await _channel
+          .invokeMethod('getDirectoryPath')
+          .timeout(
+            timeout,
+            onTimeout: () {
+              throw const FilePickerException('Directory picker timed out');
+            },
+          );
       return result as String?;
     } on PlatformException catch (e) {
       throw FilePickerException(e.message ?? 'Unknown error occurred');

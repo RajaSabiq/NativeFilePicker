@@ -39,7 +39,8 @@ Add the following permissions to your `android/app/src/main/AndroidManifest.xml`
 
 ```xml
 
-<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" /><uses-permission
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+<uses-permission
 android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 ```
 
@@ -51,7 +52,9 @@ Add the following to your `ios/Runner/Info.plist`:
 
 <key>NSDocumentsFolderUsageDescription</key><string>This app needs access to documents to pick
 files
-</string><key>NSDownloadsFolderUsageDescription</key><string>This app needs access to downloads to
+</string>
+<key>NSDownloadsFolderUsageDescription</key>
+<string>This app needs access to downloads to
 pick files
 </string>
 ```
@@ -68,9 +71,7 @@ import 'package:native_file_picker/native_file_picker.dart';
 
 ```dart
 
-final result = await
-NativeFilePicker.pickFile
-(
+final result = await NativeFilePicker.pickFile(
 type: FileType.any,
 );
 

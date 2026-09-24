@@ -3,14 +3,17 @@ import UIKit
 import MobileCoreServices
 import UniformTypeIdentifiers
 
-public class NativeFilePickerPlugin: NSObject, FlutterPlugin {
+public class NativeFilePickerPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
   private var result: FlutterResult?
   private var presentingViewController: UIViewController?
+  private var progressSink: FlutterEventSink?
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "native_file_picker", binaryMessenger: registrar.messenger())
+    let progressChannel = FlutterEventChannel(name: "native_file_picker/progress", binaryMessenger: registrar.messenger())
     let instance = NativeFilePickerPlugin()
     registrar.addMethodCallDelegate(instance, channel: channel)
+    progressChannel.setStreamHandler(instance)
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -19,6 +22,8 @@ public class NativeFilePickerPlugin: NSObject, FlutterPlugin {
     switch call.method {
     case "pickFiles":
       pickFiles(call: call, result: result)
+    case "getPlatformVersion":
+      result("iOS " + UIDevice.current.systemVersion)
     case "getDirectoryPath":
       getDirectoryPath(result: result)
     case "clearTemporaryFiles":
@@ -26,6 +31,16 @@ public class NativeFilePickerPlugin: NSObject, FlutterPlugin {
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  public func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+    progressSink = events
+    return nil
+  }
+
+  public func onCancel(withArguments arguments: Any?) -> FlutterError? {
+    progressSink = nil
+    return nil
   }
 
   private func pickFiles(call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -180,7 +195,7 @@ public class NativeFilePickerPlugin: NSObject, FlutterPlugin {
     }
   }
 
-  private func processPickedFiles(_ urls: [URL]) -> [[String: Any]]? {
+  func processPickedFiles(_ urls: [URL]) -> [[String: Any]]? {
     var files: [[String: Any]] = []
 
     for url in urls {
@@ -211,19 +226,25 @@ public class NativeFilePickerPlugin: NSObject, FlutterPlugin {
         
         let fileName = resourceValues.name ?? url.lastPathComponent
         let fileSize = resourceValues.fileSize ?? 0
-        let fileExtension = url.pathExtension.isEmpty ? nil : url.pathExtension
+        let fileExtension = (fileName as NSString).pathExtension.isEmpty ? nil : (fileName as NSString).pathExtension
 
-        // Create a more robust temporary file handling
         let tempDirectory = NSTemporaryDirectory()
-        let tempFileName = "native_file_picker_\(UUID().uuidString)_\(fileName)"
-        let tempURL = URL(fileURLWithPath: tempDirectory).appendingPathComponent(tempFileName)
+        let pickDirectory = URL(fileURLWithPath: tempDirectory)
+          .appendingPathComponent("native_file_picker_\(UUID().uuidString)", isDirectory: true)
 
-        // Simple file copy without coordinator to avoid complexities
         do {
-          let fileData = try Data(contentsOf: url)
-          try fileData.write(to: tempURL)
+          try FileManager.default.createDirectory(at: pickDirectory, withIntermediateDirectories: true)
         } catch {
-          print("Error copying file: \(error)")
+          print("Error creating temporary directory: \(error)")
+          continue
+        }
+
+        let tempURL = pickDirectory.appendingPathComponent(fileName)
+
+        // Stream-copy the file (instead of loading it fully into memory) so
+        // large media does not spike memory, and report copy progress.
+        guard copyFileWithProgress(from: url, to: tempURL, totalBytes: fileSize) != nil else {
+          print("Error copying file: \(url)")
           continue
         }
 
@@ -244,6 +265,62 @@ public class NativeFilePickerPlugin: NSObject, FlutterPlugin {
     }
 
     return files.isEmpty ? nil : files
+  }
+
+  /// Copies a file in chunks via streams and emits 0.0..1.0 progress events.
+  private func copyFileWithProgress(from sourceURL: URL, to destinationURL: URL, totalBytes: Int64) -> Int64? {
+    guard let input = InputStream(url: sourceURL) else { return nil }
+    guard let output = OutputStream(url: destinationURL, append: false) else { return nil }
+
+    input.open()
+    output.open()
+    defer {
+      input.close()
+      output.close()
+    }
+
+    emitProgress(0)
+
+    let bufferSize = 64 * 1024
+    let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+    defer { buffer.deallocate() }
+
+    var copied: Int64 = 0
+    var lastReported: Double = -1
+
+    while true {
+      let readCount = input.read(buffer, maxLength: bufferSize)
+      if readCount < 0 {
+        print("Read error while copying file: \(String(describing: input.streamError))")
+        return nil
+      }
+      if readCount == 0 { break }
+
+      let written = output.write(buffer, maxLength: readCount)
+      if written < 0 || written == 0 {
+        print("Write error while copying file: \(String(describing: output.streamError))")
+        return nil
+      }
+
+      copied += Int64(written)
+
+      if totalBytes > 0 {
+        let fraction = Double(copied) / Double(totalBytes)
+        if fraction - lastReported >= 0.01 || fraction >= 1.0 {
+          lastReported = fraction
+          emitProgress(min(fraction, 1.0))
+        }
+      }
+    }
+
+    emitProgress(1.0)
+    return copied
+  }
+
+  private func emitProgress(_ fraction: Double) {
+    DispatchQueue.main.async {
+      self.progressSink?(min(max(fraction, 0.0), 1.0))
+    }
   }
 }
 

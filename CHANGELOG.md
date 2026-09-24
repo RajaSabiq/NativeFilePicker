@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-09-23
+
+### Fixed
+- Android no longer copies the picked file synchronously on the main/UI thread.
+  Large media (e.g. long videos) no longer freezes the app, shows a black screen,
+  or triggers an ANR while the file is copied to temporary storage. The copy now
+  runs on a background executor and the result is posted back to the main thread.
+- Android in-flight picker requests are now resolved when the activity is
+  detached/recreated, so the Dart future can never hang indefinitely.
+- File `size` is returned as a 64-bit value instead of a truncated `Int`, which
+  previously wrapped negative for files larger than 2 GB.
+- iOS copies picked files with a streaming `InputStream`/`OutputStream` instead
+  of loading the entire file into memory, avoiding memory spikes/memory kills for
+  very large media.
+
+### Added
+- New `NativeFilePicker.onPickProgress` stream (0.0–1.0) reporting copy progress
+  while a picked file is moved into temporary storage on both platforms.
+- A configurable timeout on the picker method-channel calls so a stalled native
+  call cannot leave the UI stuck.
+
+## [1.0.1] - 2026-09-23
+
+### Fixed
+- iOS no longer prefixes picked files with a generated identifier when copying
+  them to the temporary directory. Each picked file is now stored inside a unique
+  temporary subdirectory using its original filename, so the returned `path`
+  basename always matches the user's filename (e.g. `document.pdf`) during
+  upload, update, and download.
+- Implemented the missing `getPlatformVersion` method on iOS and Android so the
+  template unit and integration tests pass.
+
 ## [1.0.0] - 2024-01-15
 
 ### Added

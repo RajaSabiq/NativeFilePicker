@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:native_file_picker/native_file_picker.dart';
 
@@ -34,9 +36,28 @@ class _MyHomePageState extends State<MyHomePage> {
   List<PlatformFile> _selectedFiles = [];
   String? _directoryPath;
   bool _isLoading = false;
+  double _copyProgress = 0;
+  StreamSubscription<double>? _progressSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _progressSubscription = NativeFilePicker.onPickProgress.listen((fraction) {
+      if (mounted) setState(() => _copyProgress = fraction);
+    });
+  }
+
+  @override
+  void dispose() {
+    _progressSubscription?.cancel();
+    super.dispose();
+  }
 
   Future<void> _pickSingleFile() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _copyProgress = 0;
+    });
 
     try {
       final result = await NativeFilePicker.pickFile(
@@ -56,7 +77,10 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _pickMultipleFiles() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _copyProgress = 0;
+    });
 
     try {
       final result = await NativeFilePicker.pickMultipleFiles(
@@ -76,7 +100,10 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _pickImages() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _copyProgress = 0;
+    });
 
     try {
       final result = await NativeFilePicker.pickMultipleFiles(
@@ -96,7 +123,10 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _pickCustomFiles() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _copyProgress = 0;
+    });
 
     try {
       final result = await NativeFilePicker.pickMultipleFiles(
@@ -188,6 +218,20 @@ class _MyHomePageState extends State<MyHomePage> {
               const LinearProgressIndicator(
                 backgroundColor: Colors.grey,
               ),
+            if (_copyProgress > 0 && _copyProgress < 1) ...[
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: _copyProgress,
+                  minHeight: 6,
+                  backgroundColor: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text('Copying to temp storage... '
+                  '${(_copyProgress * 100).round()}%'),
+            ],
             const SizedBox(height: 16),
 
             // Action buttons
