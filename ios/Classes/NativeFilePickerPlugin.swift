@@ -248,7 +248,7 @@ public class NativeFilePickerPlugin: NSObject, FlutterPlugin, FlutterStreamHandl
 
         // Stream-copy the file (instead of loading it fully into memory) so
         // large media does not spike memory, and report copy progress.
-        guard copyFileWithProgress(from: url, to: tempURL, totalBytes: fileSize) != nil else {
+        guard copyFileWithProgress(from: url, to: tempURL, totalBytes: Int64(fileSize)) != nil else {
           print("Error copying file: \(url)")
           continue
         }

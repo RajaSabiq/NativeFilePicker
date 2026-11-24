@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'native_file_picker'
-  s.version          = '1.0.3'
+  s.version          = '1.0.4'
   s.summary          = 'A Flutter plugin for picking files with native implementation.'
   s.description      = <<-DESC
 A Flutter plugin that provides native file picking functionality for both Android and iOS platforms.
