@@ -131,32 +131,37 @@ public class NativeFilePickerPlugin: NSObject, FlutterPlugin, FlutterStreamHandl
 
     // Add a small delay to ensure the view hierarchy is stable
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-      if let viewController = self.getRootViewController() {
-        self.presentingViewController = viewController
-        viewController.present(documentPicker, animated: true, completion: nil)
-      } else {
+      guard let presenter = self.getRootViewController(), presenter.view.window != nil else {
         result(FlutterError(code: "NO_CONTROLLER", message: "No view controller available", details: nil))
+        return
       }
+      self.presentingViewController = presenter
+      presenter.present(documentPicker, animated: true, completion: nil)
     }
   }
 
+  /// Top-most view controller that can present a modal in the active window.
+  /// Walking `presentedViewController` avoids presenting on the window root
+  /// while it is already presenting something (modal / SwiftUI / add-to-app),
+  /// which fails with "already presenting" or "view is not in the window
+  /// hierarchy".
   private func getRootViewController() -> UIViewController? {
-    // For iOS 13+ use scene-based approach
+    guard let window = Self.activeWindow() else { return nil }
+    var top = window.rootViewController
+    while let presented = top?.presentedViewController {
+      top = presented
+    }
+    return top
+  }
+
+  private static func activeWindow() -> UIWindow? {
     if #available(iOS 13.0, *) {
-      if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-         let window = windowScene.windows.first(where: { $0.isKeyWindow }) {
-        return window.rootViewController
-      }
-      
-      // Fallback for iOS 13+ if scene approach fails
-      return UIApplication.shared.windows.first?.rootViewController
+      let scenes = UIApplication.shared.connectedScenes
+        .compactMap { $0 as? UIWindowScene }
+      let scene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first
+      return scene?.windows.first(where: { $0.isKeyWindow }) ?? scene?.windows.first
     } else {
-      // For iOS 12 and below
-      if let keyWindow = UIApplication.shared.keyWindow {
-        return keyWindow.rootViewController
-      }
-      
-      return UIApplication.shared.windows.first?.rootViewController
+      return UIApplication.shared.keyWindow
     }
   }
 
@@ -166,12 +171,12 @@ public class NativeFilePickerPlugin: NSObject, FlutterPlugin, FlutterStreamHandl
       documentPicker.delegate = self
       documentPicker.allowsMultipleSelection = false
 
-      if let viewController = self.getRootViewController() {
-        self.presentingViewController = viewController
-        viewController.present(documentPicker, animated: true, completion: nil)
-      } else {
+      guard let presenter = self.getRootViewController(), presenter.view.window != nil else {
         result(FlutterError(code: "NO_CONTROLLER", message: "No view controller available", details: nil))
+        return
       }
+      self.presentingViewController = presenter
+      presenter.present(documentPicker, animated: true, completion: nil)
     }
   }
 
